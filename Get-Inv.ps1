@@ -618,6 +618,9 @@ function Upload-DiscordFile {
         return [pscustomobject]@{ Success = $false; Error = "No webhook URL" }
     }
 
+    # Make sure we use modern TLS
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
     $msg = "Inventory JSON for **$Hostname** collected by **$Technician** at $(Get-Date -Format s)"
 
     $payload = @{
@@ -628,13 +631,39 @@ function Upload-DiscordFile {
 
     $payloadJson = $payload | ConvertTo-Json -Compress
 
-    $form = @{
-        "payload_json" = $payloadJson
-        "file1"        = Get-Item $LocalFile
-    }
+    # Build multipart/form-data using HttpClient
+    $httpClient = New-Object System.Net.Http.HttpClient
+    $form = New-Object System.Net.Http.MultipartFormDataContent
 
     try {
-        Invoke-WebRequest -Uri $WebhookUrl -Method Post -Form $form | Out-Null
+        # payload_json part
+        $stringContent = New-Object System.Net.Http.StringContent($payloadJson, [System.Text.Encoding]::UTF8, "application/json")
+        $stringContent.Headers.ContentDisposition = New-Object System.Net.Http.Headers.ContentDispositionHeaderValue("form-data")
+        $stringContent.Headers.ContentDisposition.Name = '"payload_json"'
+        $form.Add($stringContent)
+
+        # file1 part
+        $fileStream = [System.IO.File]::OpenRead($LocalFile)
+        $fileContent = New-Object System.Net.Http.StreamContent($fileStream)
+        $fileContent.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("application/json")
+        $fileContent.Headers.ContentDisposition = New-Object System.Net.Http.Headers.ContentDispositionHeaderValue("form-data")
+        $fileContent.Headers.ContentDisposition.Name = '"file1"'
+        $fileContent.Headers.ContentDisposition.FileName = '"' + [System.IO.Path]::GetFileName($LocalFile) + '"'
+        $form.Add($fileContent)
+
+        # Send request
+        $response = $httpClient.PostAsync($WebhookUrl, $form).Result
+
+        # Clean up stream
+        $fileStream.Dispose()
+
+        if (-not $response.IsSuccessStatusCode) {
+            $respBody = $response.Content.ReadAsStringAsync().Result
+            $msgErr = "Discord upload failed: HTTP $($response.StatusCode) - $respBody"
+            Write-Warning $msgErr
+            return [pscustomobject]@{ Success = $false; Error = $msgErr }
+        }
+
         Write-Host "Uploaded inventory JSON to Discord channel via webhook." -ForegroundColor Green
         return [pscustomobject]@{ Success = $true; Error = $null }
     }
@@ -642,6 +671,10 @@ function Upload-DiscordFile {
         $msgErr = "Discord upload failed: $($_.Exception.Message)"
         Write-Warning $msgErr
         return [pscustomobject]@{ Success = $false; Error = $msgErr }
+    }
+    finally {
+        if ($form) { $form.Dispose() }
+        if ($httpClient) { $httpClient.Dispose() }
     }
 }
 
