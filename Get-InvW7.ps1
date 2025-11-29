@@ -645,7 +645,7 @@ function Upload-DiscordFile {
     # Use modern TLS
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    $msg = "📦 Inventory JSON for **$Hostname** collected by **$Technician** at $(Get-Date -Format s)"
+    $msg = "Inventory JSON for **$Hostname** collected by **$Technician** at $(Get-Date -Format s)"
 
     $payload = @{
         content = $msg
