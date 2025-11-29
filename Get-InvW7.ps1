@@ -368,7 +368,6 @@ function Get-FirewallStatus {
                 }
             }
         } else {
-            # Older systems: we could parse 'netsh advfirewall show allprofiles' if needed
             $info.domain  = "Unknown (cmdlet not available)"
             $info.private = "Unknown (cmdlet not available)"
             $info.public  = "Unknown (cmdlet not available)"
@@ -574,7 +573,7 @@ function Get-NetworkInfo {
                 }
             }
         } else {
-            # Fallback: use Win32_NetworkAdapter + Win32_NetworkAdapterConfiguration
+            # Fallback: Win32_NetworkAdapterConfiguration
             $adapters = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -ErrorAction SilentlyContinue |
                         Where-Object { $_.IPEnabled -eq $true }
             foreach ($a in $adapters) {
@@ -645,7 +644,9 @@ function Upload-DiscordFile {
     # Use modern TLS
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    $msg = "Inventory JSON for **$Hostname** collected by **$Technician** at $(Get-Date -Format s)"
+    # Windows 7–safe ASCII message (no emoji, no Markdown)
+    $timestamp = Get-Date -Format s
+    $msg = "Inventory JSON | Hostname=$Hostname | Technician=$Technician | Time=$timestamp"
 
     $payload = @{
         content = $msg
@@ -801,7 +802,7 @@ $inventory = [ordered]@{
     metadata = @{
         schema_version      = "1.1-win7"
         collected_timestamp = (Get-Date).ToString("s")
-        collected_by_script = "Get-DeviceInventoryJson.ps1 v1.1-win7"
+        collected_by_script = "Get-InvW7.ps1 v1.1-win7"
         technician          = $technician
     }
 }
